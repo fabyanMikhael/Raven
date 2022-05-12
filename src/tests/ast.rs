@@ -46,13 +46,34 @@ pub fn function_nested(){
 
 #[test]
 pub fn function(){
-    const BASIC: &str     = r##"fn print(){
+    const CODE: &str     = r##"fn print(){
 
     }"##;
 
-    let ast     = ParseString(BASIC);
+    let ast     = ParseString(CODE);
     let print   = Box::new(Type::Symbol("print".to_owned()));
-    let function         = Type::CreateFunction { name: print, code: Vec::new() };
+    let function         = Type::CreateFunction { name: print, code: vec![] };
+    let expected       = vec![function];
+    assert_eq!(ast, expected);
+
+    const CODE2: &str     = r##"fn x(){
+        let k = 20
+        k = 2
+        print("hi")
+    }"##;
+
+    let ast     = ParseString(CODE2);
+    let print   = Box::new(Type::Symbol("x".to_owned()));
+
+    let k = Box::new(Type::Symbol("k".to_owned()));
+    let declaration = Type::VariableDeclaration { variable: k.clone(), value:  Box::new(Type::Number(20.0)) };
+    let assignment = Type::Assignment { variable: k, value: Box::new(Type::Number(2.0)) };
+    let functionCall = Type::Call { function: Box::new(Type::Symbol("print".to_owned())), arguments: vec![Type::String("hi".to_owned())] };
+
+    let code = {vec![declaration, assignment, functionCall]}
+    .into_iter()
+    .map(Box::new).collect();
+    let function         = Type::CreateFunction { name: print, code };
     let expected       = vec![function];
     assert_eq!(ast, expected);
 }
@@ -84,7 +105,7 @@ pub fn declaration_and_assignment(){
     y = 10;
     let x = "hello";
     x = "hi";
-    "##;
+"##;
     let ast     = ParseString(BASIC);
     let y   = Type::Symbol("y".to_owned()).into();
     let x   = Type::Symbol("x".to_owned()).into();
@@ -125,14 +146,15 @@ pub fn functional(){
 #[test]
 pub fn functional_chained(){
 
-    const BASIC: &str     = r##"$ test 10 "hello" $ pop 2.4 "##;
+    const CODE: &str     = r##"$ test 10 "hello" $ pop 2.4 "##;
 
-    let ast     = ParseString(BASIC);
+    let ast     = ParseString(CODE);
     let print   = Box::new(Type::Symbol("test".to_owned()));
     let hello       = Type::String("hello".to_owned());
     let ten         = Type::Number(10.0);
     let two_dot_four      = Type::Number(2.4);
-    let pop               = Type::Call { function: Box::new(Type::Symbol("pop".to_owned())), arguments: vec![two_dot_four] };
+    let pop               = Type::Call { function: Box::new(Type::Symbol("pop".to_owned())), 
+                                               arguments: vec![two_dot_four] };
     
     let expected       = vec![Type::Call{function: print, arguments: vec![ten, hello, pop]}];
 
