@@ -73,18 +73,18 @@ peg::parser!{
         = "\"" n:$(['A'..='z' | '0'..='9' | ' ']*) "\"" { Type::String(n.to_string())}
         
         rule call() -> Type
-        = _ sym:symbol() _ "(" expr:(parse_ws() ** ",") ")" _ [';' | _]? _  {Type::Call{function: Box::new(sym), arguments: expr}}
+        = _ sym:symbol() _ "(" expr:(parse() ** ",") ")"  &_  {Type::Call{function: Box::new(sym), arguments: expr}}
 
         rule chain_call() -> Type
-        = _ "$" _ sym:symbol() __ expr:( parse_forward() ** " ") _ [';' | _]? _  {Type::Call{function: Box::new(sym), arguments: expr}}
+        = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
 
-        //ignores whitespace behind
-        rule parse_forward() -> Type
-        = _ exp:parse() {exp}
+        // //ignores whitespace behind
+        // rule parse_forward() -> Type
+        // = _ exp:parse() {exp}
 
-        //ignores whitespace around
-        rule parse_ws() -> Type
-        = _ exp:parse() _ {exp}
+        // //ignores whitespace around
+        // rule parse_ws() -> Type
+        // = _ exp:parse() _ {exp}
         
 
         rule function() -> Type
@@ -104,7 +104,7 @@ peg::parser!{
             Type::VariableDeclaration { variable: Box::new(name), value: Box::new(expr) }
         }
 
-        rule parse() -> Type = precedence!{
+        rule parse_intermediate() -> Type = precedence!{
             n:declaration() {n}
             --
             n:assignment() {n}
@@ -118,12 +118,14 @@ peg::parser!{
             n:symbol() {n}
             n:string() {n}
         }
+        rule parse() -> Type = 
+        _ n:parse_intermediate() &_  {n}
     
-        pub rule ParseFile() -> Vec<Type> = precedence!{
-            code:((parse())* ) {
-                code
-            }
-        }
+        rule parseBlock() -> Vec<Type> =
+            code: ((x:parse() (";"/"\n"/_) {x})*) {code}
+
+        pub rule ParseFile() -> Vec<Type> =
+            code:parseBlock() {code}       
     }
 }
 
