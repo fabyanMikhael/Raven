@@ -1,0 +1,4 @@
+function k(){
+    $print "hiii";
+} 
+
