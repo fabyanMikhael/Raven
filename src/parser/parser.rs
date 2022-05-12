@@ -88,7 +88,7 @@ peg::parser!{
         
 
         rule function() -> Type
-        = _ "fn" _ name:symbol()? _ "(" _ ")" _ "{" _ code:(parse() ** ";") _ "}" _ {
+        = _ "fn" _ name:symbol()? _ "(" _ ")" _ "{" _ code:parseBlock() _ "}" _ {
             let name = name.unwrap_or_else(|| Type::Symbol("".to_owned()));
             let name = Box::new(name);
             let code = code.into_iter().map(Box::new).collect();
@@ -96,11 +96,11 @@ peg::parser!{
         }
 
         rule assignment() -> Type
-        = _ name:symbol() _ "=" _ expr:parse() _ ";" _ {
+        = _ name:symbol() _ "=" _ expr:parse() _ {
             Type::Assignment { variable: Box::new(name), value: Box::new(expr) }
         }
         rule declaration() -> Type
-        = _ "let" _ name:symbol() _ "=" _ expr:parse() _ ";" _ {
+        = _ "let" _ name:symbol() _ "=" _ expr:parse() _ {
             Type::VariableDeclaration { variable: Box::new(name), value: Box::new(expr) }
         }
 
@@ -122,7 +122,7 @@ peg::parser!{
         _ n:parse_intermediate() &_  {n}
     
         rule parseBlock() -> Vec<Type> =
-            code: ((x:parse() (";"/"\n"/_) {x})*) {code}
+            _ code: ((x:parse() (";"/"\n"/_) {x})*) _ {code}
 
         pub rule ParseFile() -> Vec<Type> =
             code:parseBlock() {code}       

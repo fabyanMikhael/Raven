@@ -66,7 +66,7 @@ impl Interpreter{
 
     pub fn run(&mut self, code: String){
         let node = ParseString(&code);
-        println!("running {:?}", node);
+        // println!("running {:?}", node);
         Self::interpretCode(node, self.global.clone());
     }
 

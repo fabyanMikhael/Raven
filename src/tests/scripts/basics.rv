@@ -1,4 +1,5 @@
-function k(){
-    $print "hiii";
+fn k(){
+    $print "hello" 2;
 } 
 
+k();
