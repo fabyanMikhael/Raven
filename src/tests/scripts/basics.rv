@@ -1,5 +1,5 @@
-fn soup(n) {
-    n * "bark"
-}
+let multiply = fn (x,y) { x * y }
 
-5 |> soup() |> $ print 42 $ number "52"
+let double = $multiply 2
+
+double(25) |> print()
