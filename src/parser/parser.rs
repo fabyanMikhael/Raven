@@ -1,7 +1,7 @@
 use ::std::fs::read_to_string;
-use std::{rc::Rc, collections::HashMap, ops::Index, cell::RefCell, fmt::Debug};
+use std::{rc::Rc, cell::RefCell, fmt::Debug};
 
-use crate::interpreter::interpreter::{Scope, RefScope, Object, Interpreter, FunctionTypes};
+use crate::interpreter::interpreter::{RefScope, Object, FunctionTypes};
 
 #[derive(Clone)]
 pub struct Func(pub &'static dyn Fn(RefScope,Vec<Object>) -> Option<Object>);
