@@ -52,7 +52,7 @@ pub fn function(){
 
     let ast     = ParseString(CODE);
     let print   = Box::new(Type::Symbol("print".to_owned()));
-    let function         = Type::CreateFunction { name: print, code: vec![] };
+    let function         = Type::CreateFunction { name: print, code: vec![], parameters: vec![] };
     let expected       = vec![function];
     assert_eq!(ast, expected);
 
@@ -73,7 +73,7 @@ pub fn function(){
     let code = {vec![declaration, assignment, functionCall]}
     .into_iter()
     .map(Box::new).collect();
-    let function         = Type::CreateFunction { name: print, code };
+    let function         = Type::CreateFunction { name: print, code, parameters: vec![] };
     let expected       = vec![function];
     assert_eq!(ast, expected);
 }
