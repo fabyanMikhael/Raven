@@ -1,5 +1,7 @@
-fn soup(n) {
-    n * "bark"
+fn mul(n) {
+    n * 2
 }
 
-5 |> soup() |> $ print 42 $ number "52"
+"hello" |> $ print $ mul "world"
+
+

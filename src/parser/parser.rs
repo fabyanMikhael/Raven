@@ -127,23 +127,30 @@ peg::parser!{
         rule chain_call() -> Type
         = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
 
-        rule pipe() -> Type
-        = prev:Atom() _ "|>" _ expr:(pipe_call() ** "|>") {
-            let mut last: Option<Type> = None;
+        rule pipe_right() -> Type
+        = prev:Atom() _ "|>" _ expr:(pipe_call_right() ++ "|>") {
+            let mut last = prev;
             for func in expr {
                 if let Type::Call {function, mut arguments } = func {
-                    if let Some(ref last_func) = last {
-                        arguments.insert(0, last_func.clone())
-                    } else {
-                        arguments.insert(0, prev.clone());
-                    }
-
-                    last = Some(Type::Call{function, arguments});
+                    arguments.insert(0, last.clone());
+                    last = Type::Call{function, arguments};
                 }
             }
-
-            return last.unwrap_or_else(|| panic!("attempted to pipe into a non-function object"))
+            return last
         }
+
+        rule pipe_left() -> Type
+        = expr:(pipe_call_left() ++ "<|") _ "<|" _ end:Atom(){
+            let mut last = end;
+            for func in expr.into_iter().rev() {
+                if let Type::Call { function, mut arguments } = func {
+                    arguments.push(last.clone());
+                    last = Type::Call { function, arguments};
+                }
+            }
+            return last
+        }
+        
 
         rule function() -> Type
         = _ "fn" _ name:symbol()? _ "(" parameters:(symbol() ** ",") ")" _ "{" _ code:parseBlock() _ "}" _ {
@@ -178,7 +185,8 @@ peg::parser!{
             --
             n:assignment() {n}
             --
-            n:pipe() {n}
+            n:pipe_right() {n}
+            n:pipe_left() {n}
             --
             n:function() {n}
             n:chain_call() {n}
@@ -195,12 +203,22 @@ peg::parser!{
         rule parse() -> Type = 
         _ n:parse_intermediate() &_  {n}
 
-
-        rule pipe_call() -> Type = precedence! {
+        rule pipe_call_right() -> Type = precedence! {
+            _ n:pipe_left() _ {n}
+            --
             _ n:chain_call() _ {n}
             --
             _ n:call() _ {n}
         }
+
+        rule pipe_call_left() -> Type = precedence! {
+            _ n:pipe_right() _ {n}
+            --
+            _ n:chain_call() _ {n}
+            --
+            _ n:call() _ {n}
+        }
+
     
         rule parseBlock() -> Vec<Type> =
             _ code: ((x:parse() (";"/"\n"/_) {x})*) _ {code}
