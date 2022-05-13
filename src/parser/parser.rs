@@ -57,11 +57,14 @@ impl Type{
 }
 
 peg::parser!{
+    
     pub grammar RavenParser() for str {
+        rule whitespace()
+        = [' '| '\t' | '\n' | '\r' |'\u{A}']
         rule _ 
-        = [' '| '\t' | '\n' | '\r' |'\u{A}']*
+        = whitespace()*
         rule __
-        = [' '| '\t' | '\n' | '\r' |'\u{A}']+
+        = whitespace()+
 
         rule number() -> Type
         = n:$(['0'..='9' | '.' | '-']+) { Type::Number(n.parse::<f32>().unwrap_or_else(|_|panic!("value: {} is not a valid number!", n)))}
@@ -78,6 +81,24 @@ peg::parser!{
         rule chain_call() -> Type
         = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
 
+
+        rule pipe() -> Type
+        = prev:obj() _ "|>" _ expr:(pipe_call() ** "|>") {
+            let mut last: Option<Type> = None;
+            for func in expr {
+                if let Type::Call {function, mut arguments } = func {
+                    if let Some(ref last_func) = last {
+                        arguments.insert(0, last_func.clone())
+                    } else {
+                        arguments.insert(0, prev.clone());
+                    }
+
+                    last = Some(Type::Call{function, arguments});
+                }
+            }
+
+            return last.unwrap_or_else(|| panic!("attempted to pipe into a non-function object"))
+        }
         // //ignores whitespace behind
         // rule parse_forward() -> Type
         // = _ exp:parse() {exp}
@@ -109,6 +130,8 @@ peg::parser!{
             --
             n:assignment() {n}
             --
+            n:pipe() {n}
+            --
             n:function() {n}
             n:chain_call() {n}
             --
@@ -118,8 +141,21 @@ peg::parser!{
             n:symbol() {n}
             n:string() {n}
         }
+
         rule parse() -> Type = 
         _ n:parse_intermediate() &_  {n}
+
+
+        rule obj() -> Type = precedence!{
+            n:call()   {n}
+            --
+            n:number() {n}
+            n:symbol() {n}
+            n:string() {n}
+        }
+
+        rule pipe_call() -> Type
+        = _ n:call() _ {n}
     
         rule parseBlock() -> Vec<Type> =
             _ code: ((x:parse() (";"/"\n"/_) {x})*) _ {code}

@@ -160,3 +160,36 @@ pub fn functional_chained(){
 
     assert_eq!(ast, expected);
 }
+
+
+
+#[test]
+pub fn piping_regular() {
+    const BASIC: &str     = r##"32 |> print("piping") "##;
+    let ast     = ParseString(BASIC);
+    let print   = Box::new(Type::Symbol("print".to_owned()));
+    // let hello       = Type::String("hello".to_owned());
+    let hello               = Type::Number(32.0);
+    let piping      = Type::String("piping".to_owned());
+
+    let expected       = vec![Type::Call{function: print, arguments: vec![hello, piping]}];
+    assert_eq!(ast, expected);
+}
+
+
+#[test]
+pub fn piping_chain() {
+    const BASIC: &str     = r##""hello" |> print("piping") |> soup("goop")"##;
+    let ast     = ParseString(BASIC);
+    let hello       = Type::String("hello".to_owned());
+    let print   = Box::new(Type::Symbol("print".to_owned()));
+    let piping      = Type::String("piping".to_owned());
+
+    let first_pipe       = Type::Call{function: print, arguments: vec![hello, piping]};
+
+    let soup   = Box::new(Type::Symbol("soup".to_owned()));
+    let goop      = Type::String("goop".to_owned());
+    let expected       = vec![Type::Call{function: soup, arguments: vec![first_pipe, goop]}];
+
+    assert_eq!(ast, expected);
+}
