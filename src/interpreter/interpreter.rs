@@ -1,5 +1,5 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell, borrow::Borrow};
-
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::fmt::Debug;
 use crate::parser::parser::{Type, ParseString, Func};
 
 pub type Object = Rc<RefCell<Type>>;
@@ -19,7 +19,7 @@ impl  Slot {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Scope{
     map: HashMap<String, Rc<Slot>>,
     parent: Option<RefScope>
@@ -61,12 +61,20 @@ impl Scope{
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum FunctionTypes{
     NormalFunction{code: Vec<Box<Type>>, scope: RefScope, parameters: Vec<String>},
     BuiltIn{Function: Func, parameters: u8},
-    // PartialFunction{function: Object, applied: Vec<Object>}
 }
+impl Debug for FunctionTypes{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NormalFunction { code, scope, parameters } => f.debug_struct("NormalFunction").field("code", code).field("parameters", parameters).finish(),
+            Self::BuiltIn { Function, parameters } => f.debug_struct("BuiltIn").field("Function", Function).field("parameters", parameters).finish(),
+        }
+    }
+}
+
 impl FunctionTypes{
     pub fn RunCode(code: &Vec<Box<Type>>, scope: RefScope) -> Option<Object>{
         let mut result = None;
@@ -77,26 +85,29 @@ impl FunctionTypes{
     }
     pub fn isEnoughArgs(this: &Self, amount: u8) -> bool{
         match this{
-            FunctionTypes::NormalFunction { code, scope, parameters } => amount as usize == parameters.len(),
-            FunctionTypes::BuiltIn { Function, parameters } => amount >= *parameters,
-            // FunctionTypes::PartialFunction { function, applied } => {
-            //     if let Type::Function(func) = &*(**function).borrow(){
-            //         FunctionTypes::isEnoughArgs(func, amount)
-            //     }else{
-            //         panic!("idk man")
-            //     }
-            // },
+            FunctionTypes::NormalFunction { code: _, scope: _, parameters } => amount as usize == parameters.len(),
+            FunctionTypes::BuiltIn { Function: _, parameters } => amount >= *parameters,
         }
     }
 
-    pub fn call(this: &Self, function: Object, evaluated_arguments: Vec<Rc<RefCell<Type>>>, scope: RefScope) -> Option<Object>{
+    pub fn call(this: &Self, _function: Object, evaluated_arguments: Vec<Rc<RefCell<Type>>>, scope: RefScope) -> Option<Object>{
 
         match this {
             FunctionTypes::NormalFunction { code, scope, parameters } => {
                 if evaluated_arguments.len() < parameters.len(){
                     // let partial = Rc::new(RefCell::new(Type::Function(FunctionTypes::PartialFunction { function, applied: evaluated_arguments })));
                     // Some(partial)
-                    panic!("Called function with {} arguments. Expected {}", evaluated_arguments.len(), parameters.len());
+                    let new_scope = (**scope).borrow().clone();
+                    let new_scope = Rc::new(RefCell::new(new_scope));
+                    let new_code = code.clone();
+                    let mut new_parameters = parameters.clone();
+                    for (arg,param) in evaluated_arguments.into_iter().zip(parameters){
+                        new_scope.borrow_mut().declare(param.clone(), arg.clone());
+                        new_parameters.remove(0);
+                    }
+                    let function = FunctionTypes::NormalFunction { code: new_code, scope: new_scope, parameters: new_parameters };
+                    let functionObj = Type::Function(function);
+                    Some(functionObj.wrap())
                 }else{
                     for (parameter,argument) in parameters.iter().zip(evaluated_arguments){
                         scope.borrow_mut().declare(parameter.clone(), argument);
@@ -108,26 +119,6 @@ impl FunctionTypes{
                 if evaluated_arguments.len() < *parameters as usize{panic!("Called function with {} parameters. Expected {} or more*", evaluated_arguments.len(), parameters)} 
                 return Function.0(scope.clone(), evaluated_arguments);
             },
-            // FunctionTypes::PartialFunction { function, applied } => {
-            //     let mut new_args = vec![];
-            //     for i in applied{new_args.push(i.clone())};
-            //     for i in evaluated_arguments{new_args.push(i)};
-                
-            //     println!("partial==");
-            //     if let Type::Function(func) = &*(**function).borrow(){
-            //         if FunctionTypes::isEnoughArgs(func, new_args.len() as u8){
-            //             FunctionTypes::call(func, function.clone(), new_args, scope)
-            //         }else{
-            //             println!("partial");
-            //             let partial = FunctionTypes::PartialFunction { function: function.clone(), applied: new_args};
-            //             let partial = Type::Function(partial);
-            //             let partial = Rc::new(RefCell::new(partial)); 
-            //             Some(partial)
-            //         }
-            //     }else{
-            //         None
-            //     }
-            // },
         }
     }
 }
@@ -160,7 +151,6 @@ impl Interpreter{
     }
 
     fn interpet(node: Type, scope: RefScope) -> Option<Object>{
-        // println!("interpreting: {:?}", node);
         match node{
             Type::Call { function, arguments } => {
                 let name = Self::Symbol(*function);
@@ -187,10 +177,10 @@ impl Interpreter{
             },
             Type::CreateFunction { name, code, parameters } => {
                 let function  = FunctionTypes::NormalFunction { code, scope: scope.clone(), parameters };
-                let function = Type::Function(function);
+                let function = Type::Function(function).wrap();
                 scope.borrow_mut()
-                .declare(Self::Symbol(*name), Rc::new(RefCell::new(function)));
-                None
+                .declare(Self::Symbol(*name), function.clone());
+                Some(function)
             },
             Type::Symbol(name) => {
                 let result = Some((*scope).borrow().get(&name).get().clone());
