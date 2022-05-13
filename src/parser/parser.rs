@@ -10,13 +10,13 @@ impl Debug for Func{
         f.debug_tuple("Func").field(&(&self.0 as *const _ as usize)).finish()
     }
 }
+
 impl Func{
     pub fn new(value: Box<dyn Fn(RefScope,Vec<Object>) -> Option<Object>>) -> Self{
         let val: &'static dyn Fn(RefScope,Vec<Object>) -> Option<Object> = Box::leak(value);
         Self(val)
     }
 }
-
 
 impl PartialEq for Func{
     fn eq(&self, other: &Self) -> bool {
@@ -29,14 +29,16 @@ impl PartialEq for Func{
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type{
     Number(f32),
+    Bool(bool),
     Symbol(String),
     String(String),
     Call{function: Box<Type>, arguments: Vec<Type>},
     VariableDeclaration{variable: Box<Type>, value: Box<Type>},
     Assignment{variable: Box<Type>, value: Box<Type>},
     CreateFunction{name: Box<Type>, code: Vec<Box<Type>>, parameters: Vec<String>},
-    Function(FunctionTypes)    
-}
+    Function(FunctionTypes),
+    Conditional{condition: Box<Type>, then: Vec<Type>, otherwise: Option<Vec<Type>>}
+}   
 
 impl Into<Rc<RefCell<Self>>> for Type{
     fn into(self) -> Rc<RefCell<Self>> {
@@ -53,6 +55,7 @@ impl Type{
             Type::Number(e) =>    format!("{}", e),
             Type::Symbol(e) => format!("{}", e),
             Type::String(e) => format!("{}", e),
+            Type::Bool(e) => format!("{}", e),
             _ => format!("{:?}", self)
         }
     }
@@ -85,6 +88,28 @@ impl Type{
             _ => panic!("attempted to Divide {:?} with {:?}",x,y),
         }
     }
+
+    pub fn Power(x: Object, y: Object) -> Object{
+        match (&*x.borrow(),&*y.borrow()){
+            (Type::Number(x), Type::Number(y)) => {Type::Number((*x).powf(*y)).wrap()},
+            _ => panic!("attempted to Divide {:?} with {:?}",x,y),
+        }
+    }
+
+    pub fn Equals(x: Object, y: Object) -> Object{
+        return Type::Bool(*x.borrow() == *y.borrow()).wrap()
+    }
+
+    pub fn NotEquals(x: Object, y: Object) -> Object{
+        return Type::Bool(*x.borrow() != *y.borrow()).wrap()
+    }
+
+    pub fn LessThanOrEquals(x: Object, y: Object) -> Object{
+        match (&*x.borrow(),&*y.borrow()){
+            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x <= *y).wrap()},
+            _ => panic!("attempted to compare {:?} with {:?}",x,y),
+        }
+    }
 }
 
 
@@ -101,23 +126,37 @@ peg::parser!{
 
         rule number() -> Type
         = n:$(['0'..='9' | '.' | '-']+) { Type::Number(n.parse::<f32>().unwrap_or_else(|_|panic!("value: {} is not a valid number!", n)))}
-        
+
+        rule math_op()
+        = ['+'| '-' | '/' | '*' | '^' | '%']
+
         rule Arithmetic() -> Type
         = precedence!{
-            x:Atom() _ "+" _ y:Atom() { Type::Call{function: Box::new(Type::Symbol("__add__".to_owned())), arguments: vec![x,y] } }
-            x:Atom() _ "-" _ y:Atom() { Type::Call{function: Box::new(Type::Symbol("__sub__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "**" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__pow__".to_owned())), arguments: vec![x,y] } }
             --
-            x:Atom() _ "*" _ y:Atom() { Type::Call{function: Box::new(Type::Symbol("__mult__".to_owned())), arguments: vec![x,y] } }
-            x:Atom() _ "/" _ y:Atom() { Type::Call{function: Box::new(Type::Symbol("__div__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "*" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__mult__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "/" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__div__".to_owned())), arguments: vec![x,y] } }
             --
-            x:Atom() _ "^" _ y:Atom() { Type::Call{function: Box::new(Type::Symbol("__pow__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "+" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__add__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "-" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__sub__".to_owned())), arguments: vec![x,y] } }
             --
-            "(" e:Arithmetic() ")" { e }
+            _ x:Atom() _ {x}
+        }
+
+        rule Conditional() -> Type
+        = precedence!{
+            _ x:Atom() _ "==" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__equals__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "!=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__not_equals__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "<=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__leq__".to_owned())), arguments: vec![x,y] } }
+
         }
 
         rule symbol() -> Type
         = n:$(['A'..='z']+['0'..='9']*) { Type::Symbol(n.to_string()) }
         
+        rule spaced_symbol() -> Type
+        = _ n:symbol() _ {n}
+
         rule string() -> Type
         = "\"" n:$(['A'..='z' | '0'..='9' | ' ']*) "\"" { Type::String(n.to_string())}
     
@@ -150,10 +189,25 @@ peg::parser!{
             }
             return last
         }
-        
+
+        // rule if_condition() -> Type 
+        // = _ "if" _ condition:parse() _ "{" _ then:parseBlock() _ "}" _  otherwise:("else" _ "{" _ otherwise:parseBlock() _ "}" {otherwise})? _ {
+        //     Type::Conditional{condition: Box::new(condition), then, otherwise}
+        // }
+
+        rule Else() -> Vec<Type>
+        = "{" _ code:parseBlock() _ "}" {code}
+        rule Elif() -> Vec<Type>
+        = code: if_condition() {vec![code]}
+        rule else_elif() -> Vec<Type>
+        = "else" _ res:(Else() / Elif()) {res}
+        rule if_condition() -> Type
+        = _ "if" _ condition:parse() _ "{" _ then:parseBlock() _ "}" _ otherwise:(else_elif())? _ {
+            Type::Conditional{condition: Box::new(condition), then, otherwise}
+        }
 
         rule function() -> Type
-        = _ "fn" _ name:symbol()? _ "(" parameters:(symbol() ** ",") ")" _ "{" _ code:parseBlock() _ "}" _ {
+        = _ "fn" _ name:symbol()? _ "(" parameters:(spaced_symbol() ** ",") ")" _ "{" _ code:parseBlock() _ "}" _ {
             let name = name.unwrap_or_else(|| Type::Symbol("".to_owned()));
             let name = Box::new(name);
             let code = code.into_iter().map(Box::new).collect();
@@ -178,6 +232,7 @@ peg::parser!{
             n:number() {n}
             n:symbol() {n}
             n:string() {n}
+            _ "(" _ e:Arithmetic() _ ")" _ { e }
         }
 
         rule parse_intermediate() -> Type = precedence!{
@@ -185,15 +240,19 @@ peg::parser!{
             --
             n:assignment() {n}
             --
+            n:if_condition() {n}
+            --
             n:pipe_right() {n}
             n:pipe_left() {n}
             --
             n:function() {n}
             n:chain_call() {n}
             --
-            n:call()   {n}
+            n:Conditional() {n}
             --
             n:Arithmetic() {n}
+            --
+            n:call()   {n}
             --
             n:number() {n}
             n:symbol() {n}

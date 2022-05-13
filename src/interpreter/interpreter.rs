@@ -150,13 +150,17 @@ impl Interpreter{
 
     pub fn run(&mut self, code: String){
         let node = ParseString(&code);
+        println!("{:#?}", node);
         Self::interpretCode(node, self.global.clone());
     }
 
-    fn interpretCode(code: Vec<Type>, scope: RefScope){
+    fn interpretCode(code: Vec<Type>, scope: RefScope) -> Option<Object> {
+        let mut result = None;
         for node in code{
-            Self::interpet(node, scope.clone());
+            result = Self::interpet(node, scope.clone());
         }
+
+        result
     }
 
     fn interpet(node: Type, scope: RefScope) -> Option<Object>{
@@ -190,6 +194,18 @@ impl Interpreter{
                 let function = Type::Function(function);
                 scope.borrow_mut()
                 .declare(Self::Symbol(*name), Rc::new(RefCell::new(function)));
+                None
+            },
+            Type::Conditional { condition, then, otherwise } => {
+                if let Type::Bool(condition) = &*(*Interpreter::interpet(*condition, scope.clone()).unwrap()).borrow() {
+                    return if *condition {
+                        Interpreter::interpretCode(then, scope.clone())
+                    } else if let Some(otherwise) = otherwise {
+                        Interpreter::interpretCode(otherwise, scope.clone())
+                    } else {
+                        None
+                    }
+                }
                 None
             },
             Type::Symbol(name) => {

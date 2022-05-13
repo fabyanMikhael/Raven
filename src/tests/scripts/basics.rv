@@ -1,7 +1,13 @@
-fn mul(n) {
-    n * 2
+fn fibb(n) {
+    print(n)
+    
+    if n <= 1 {
+        n
+    } else {
+        fibb(n - 1) + fibb(n - 2)
+    }
 }
 
-"hello" |> $ print $ mul "world"
 
 
+print(fibb(9))
