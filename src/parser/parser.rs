@@ -128,7 +128,7 @@ peg::parser!{
         = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
 
         rule pipe() -> Type
-        = prev:obj() _ "|>" _ expr:(pipe_call() ** "|>") {
+        = prev:Atom() _ "|>" _ expr:(pipe_call() ** "|>") {
             let mut last: Option<Type> = None;
             for func in expr {
                 if let Type::Call {function, mut arguments } = func {
@@ -196,16 +196,11 @@ peg::parser!{
         _ n:parse_intermediate() &_  {n}
 
 
-        rule obj() -> Type = precedence!{
-            n:call()   {n}
+        rule pipe_call() -> Type = precedence! {
+            _ n:chain_call() _ {n}
             --
-            n:number() {n}
-            n:symbol() {n}
-            n:string() {n}
+            _ n:call() _ {n}
         }
-
-        rule pipe_call() -> Type
-        = _ n:call() _ {n}
     
         rule parseBlock() -> Vec<Type> =
             _ code: ((x:parse() (";"/"\n"/_) {x})*) _ {code}

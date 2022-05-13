@@ -1,1 +1,5 @@
-24 |> print(42)
+fn soup(n) {
+    n * "bark"
+}
+
+5 |> soup() |> $ print 42 $ number "52"
