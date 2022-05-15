@@ -26,6 +26,8 @@ impl PartialEq for Func{
     }
 }
 
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type{
     Number(f32),
@@ -37,8 +39,10 @@ pub enum Type{
     Assignment{variable: Box<Type>, value: Box<Type>},
     CreateFunction{name: Box<Type>, code: Vec<Box<Type>>, parameters: Vec<String>},
     Function(FunctionTypes),
-    Conditional{condition: Box<Type>, then: Vec<Type>, otherwise: Option<Vec<Type>>}
-}   
+    Conditional{condition: Box<Type>, then: Vec<Type>, otherwise: Option<Vec<Type>>},
+    While{condition: Box<Type>, code: Vec<Type>},
+    Invocation{code: Vec<Type>}
+}
 
 impl Into<Rc<RefCell<Self>>> for Type{
     fn into(self) -> Rc<RefCell<Self>> {
@@ -110,12 +114,32 @@ impl Type{
             _ => panic!("attempted to compare {:?} with {:?}",x,y),
         }
     }
+
+    pub fn GreaterThanOrEquals(x: Object, y: Object) -> Object{
+        match (&*x.borrow(),&*y.borrow()){
+            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x >= *y).wrap()},
+            _ => panic!("attempted to compare {:?} with {:?}",x,y),
+        }
+    }
+
+    pub fn LessThan(x: Object, y: Object) -> Object{
+        match (&*x.borrow(),&*y.borrow()){
+            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x < *y).wrap()},
+            _ => panic!("attempted to compare {:?} with {:?}",x,y),
+        }
+    }
+
+    pub fn GreaterThan(x: Object, y: Object) -> Object{
+        match (&*x.borrow(),&*y.borrow()){
+            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x > *y).wrap()},
+            _ => panic!("attempted to compare {:?} with {:?}",x,y),
+        }
+    }
 }
 
 
 
 peg::parser!{
-    
     pub grammar RavenParser() for str {
         rule whitespace()
         = [' '| '\t' | '\n' | '\r' |'\u{A}']
@@ -126,9 +150,6 @@ peg::parser!{
 
         rule number() -> Type
         = n:$(['0'..='9' | '.' | '-']+) { Type::Number(n.parse::<f32>().unwrap_or_else(|_|panic!("value: {} is not a valid number!", n)))}
-
-        rule math_op()
-        = ['+'| '-' | '/' | '*' | '^' | '%']
 
         rule Arithmetic() -> Type
         = precedence!{
@@ -148,7 +169,9 @@ peg::parser!{
             _ x:Atom() _ "==" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__equals__".to_owned())), arguments: vec![x,y] } }
             _ x:Atom() _ "!=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__not_equals__".to_owned())), arguments: vec![x,y] } }
             _ x:Atom() _ "<=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__leq__".to_owned())), arguments: vec![x,y] } }
-
+            _ x:Atom() _ ">=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__gte__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ "<" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__lt__".to_owned())), arguments: vec![x,y] } }
+            _ x:Atom() _ ">" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__gt__".to_owned())), arguments: vec![x,y] } }
         }
 
         rule symbol() -> Type
@@ -158,7 +181,7 @@ peg::parser!{
         = _ n:symbol() _ {n}
 
         rule string() -> Type
-        = "\"" n:$(['A'..='z' | '0'..='9' | ' ']*) "\"" { Type::String(n.to_string())}
+        = "\"" n:$([^ '"']*) "\"" { Type::String(n.to_string())}
     
         rule call() -> Type
         = _ sym:symbol() _ "(" expr:(parse() ** ",") ")"  &_  {Type::Call{function: Box::new(sym), arguments: expr}}
@@ -166,48 +189,71 @@ peg::parser!{
         rule chain_call() -> Type
         = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
 
+
+        rule dual_pipe() -> Type
+        = left:Atom() _ "<|" _ middle:Atom() _ "|>" _ right:Atom() {
+            let mut code = vec![];
+
+            if let Type::Call {function, mut arguments } = left {
+                arguments.push(middle.clone());
+                code.push(Type::Call { function, arguments })
+            }
+
+            if let Type::Call {function, mut arguments } = right {
+                arguments.insert(0, middle);
+                code.push(Type::Call { function, arguments })
+            }
+
+            Type::Invocation { code }
+        }
+
+
         rule pipe_right() -> Type
-        = prev:Atom() _ "|>" _ expr:(pipe_call_right() ++ "|>") {
-            let mut last = prev;
+        = _ start:(start:Atom() _ "|>" _ {start})? _ expr:(pipe_call_right() ++ "|>") _  {
+            let mut last = start;
             for func in expr {
-                if let Type::Call {function, mut arguments } = func {
-                    arguments.insert(0, last.clone());
-                    last = Type::Call{function, arguments};
+                if let Type::Call { function, mut arguments } = func {
+                    if let Some(last_func) = last {
+                        arguments.insert(0, last_func);
+                    }
+                    last = Some(Type::Call { function, arguments});                   
                 }
             }
-            return last
+            return last.unwrap()
         }
 
         rule pipe_left() -> Type
-        = expr:(pipe_call_left() ++ "<|") _ "<|" _ end:Atom(){
+        = _ expr:(pipe_call_left() ++ "<|") _ end:("<|" _ end:Atom() _ {end})? _ {
             let mut last = end;
             for func in expr.into_iter().rev() {
                 if let Type::Call { function, mut arguments } = func {
-                    arguments.push(last.clone());
-                    last = Type::Call { function, arguments};
+                    if let Some(last_func) = last {
+                        arguments.push(last_func);
+                    }
+                    last = Some(Type::Call { function, arguments});                   
                 }
             }
-            return last
+            return last.unwrap()
         }
 
-        // rule if_condition() -> Type 
-        // = _ "if" _ condition:parse() _ "{" _ then:parseBlock() _ "}" _  otherwise:("else" _ "{" _ otherwise:parseBlock() _ "}" {otherwise})? _ {
-        //     Type::Conditional{condition: Box::new(condition), then, otherwise}
-        // }
-
         rule Else() -> Vec<Type>
-        = "{" _ code:parseBlock() _ "}" {code}
+        = code:bracket_block() {code}
         rule Elif() -> Vec<Type>
         = code: if_condition() {vec![code]}
         rule else_elif() -> Vec<Type>
         = "else" _ res:(Else() / Elif()) {res}
         rule if_condition() -> Type
-        = _ "if" _ condition:parse() _ "{" _ then:parseBlock() _ "}" _ otherwise:(else_elif())? _ {
+        = _ "if" _ condition:parse() _ then:bracket_block() _ otherwise:(else_elif())? _ {
             Type::Conditional{condition: Box::new(condition), then, otherwise}
         }
 
+        rule while_loop() -> Type
+        = _ "while" _ condition:parse() _ code:bracket_block() _ {
+            Type::While{condition: Box::new(condition), code}
+        }
+
         rule function() -> Type
-        = _ "fn" _ name:symbol()? _ "(" parameters:(spaced_symbol() ** ",") ")" _ "{" _ code:parseBlock() _ "}" _ {
+        = _ "fn" _ name:symbol()? _ "(" parameters:(spaced_symbol() ** ",") ")" _ code:bracket_block() _ {
             let name = name.unwrap_or_else(|| Type::Symbol("".to_owned()));
             let name = Box::new(name);
             let code = code.into_iter().map(Box::new).collect();
@@ -229,6 +275,9 @@ peg::parser!{
             --
             n:call()   {n}
             --
+            n:while_loop() {n}
+            n:if_condition() {n}
+            --
             n:number() {n}
             n:symbol() {n}
             n:string() {n}
@@ -240,15 +289,18 @@ peg::parser!{
             --
             n:assignment() {n}
             --
-            n:if_condition() {n}
+            n:dual_pipe() {n}
             --
-            n:pipe_right() {n}
             n:pipe_left() {n}
+            n:pipe_right() {n}
             --
             n:function() {n}
             n:chain_call() {n}
             --
             n:Conditional() {n}
+            --
+            n:if_condition() {n}
+            n:while_loop() {n}
             --
             n:Arithmetic() {n}
             --
@@ -261,7 +313,7 @@ peg::parser!{
 
         rule parse() -> Type = 
         _ n:parse_intermediate() &_  {n}
-
+        
         rule pipe_call_right() -> Type = precedence! {
             _ n:pipe_left() _ {n}
             --
@@ -271,16 +323,18 @@ peg::parser!{
         }
 
         rule pipe_call_left() -> Type = precedence! {
-            _ n:pipe_right() _ {n}
-            --
+            // _ n:pipe_right() _ {n}
+            // --
             _ n:chain_call() _ {n}
             --
             _ n:call() _ {n}
         }
 
+        rule bracket_block() -> Vec<Type>
+        = "{" _ code:parseBlock() _ "}" {code}
     
         rule parseBlock() -> Vec<Type> =
-            _ code: ((x:parse() (";"/"\n"/_) {x})*) _ {code}
+            _ code:((x:parse() (";"/"\n"/_) {x})*) _ {code}
 
         pub rule ParseFile() -> Vec<Type> =
             code:parseBlock() {code}       

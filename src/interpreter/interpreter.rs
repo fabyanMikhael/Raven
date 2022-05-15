@@ -79,7 +79,7 @@ impl FunctionTypes{
     pub fn RunCode(code: &Vec<Box<Type>>, scope: RefScope) -> Option<Object>{
         let mut result = None;
         for line in code{
-            result = Interpreter::interpet(*line.clone(), scope.clone());
+            result = Interpreter::interpret(*line.clone(), scope.clone());
         }
         result
     }
@@ -94,11 +94,10 @@ impl FunctionTypes{
 
         match this {
             FunctionTypes::NormalFunction { code, scope, parameters } => {
+                let new_scope = (**scope).borrow().clone();
+                let new_scope = Rc::new(RefCell::new(new_scope));
+
                 if evaluated_arguments.len() < parameters.len(){
-                    // let partial = Rc::new(RefCell::new(Type::Function(FunctionTypes::PartialFunction { function, applied: evaluated_arguments })));
-                    // Some(partial)
-                    let new_scope = (**scope).borrow().clone();
-                    let new_scope = Rc::new(RefCell::new(new_scope));
                     let new_code = code.clone();
                     let mut new_parameters = parameters.clone();
                     for (arg,param) in evaluated_arguments.into_iter().zip(parameters){
@@ -110,9 +109,9 @@ impl FunctionTypes{
                     Some(functionObj.wrap())
                 }else{
                     for (parameter,argument) in parameters.iter().zip(evaluated_arguments){
-                        scope.borrow_mut().declare(parameter.clone(), argument);
+                        new_scope.borrow_mut().declare(parameter.clone(), argument);
                     }
-                    FunctionTypes::RunCode(&code, scope.clone())
+                    FunctionTypes::RunCode(&code, new_scope)
                 }
             },
             FunctionTypes::BuiltIn { Function, parameters } => {
@@ -139,6 +138,10 @@ impl Interpreter{
         self.global.borrow_mut().declare(name.to_string(), Rc::new(RefCell::new(obj)));
     }
 
+    pub fn addObject(&mut self, name: &str, value: Type){
+        self.global.borrow_mut().declare(name.to_string(), value.wrap());
+    }
+
     pub fn run(&mut self, code: String){
         let node = ParseString(&code);
         println!("{:#?}", node);
@@ -148,18 +151,18 @@ impl Interpreter{
     fn interpretCode(code: Vec<Type>, scope: RefScope) -> Option<Object> {
         let mut result = None;
         for node in code{
-            result = Self::interpet(node, scope.clone());
+            result = Self::interpret(node, scope.clone());
         }
 
         result
     }
 
-    fn interpet(node: Type, scope: RefScope) -> Option<Object>{
+    fn interpret(node: Type, scope: RefScope) -> Option<Object>{
         match node{
             Type::Call { function, arguments } => {
                 let name = Self::Symbol(*function);
                 let arguments = arguments.into_iter()
-                .map(|e| Interpreter::interpet(e, scope.clone()).unwrap_or_else(|| panic!("cannot use void as argument")))
+                .map(|e| Interpreter::interpret(e, scope.clone()).unwrap_or_else(|| panic!("cannot use void as argument")))
                 .collect::<Vec<_>>();
                 // println!("args {:?}", arguments);
                 let functionObject = scope.borrow_mut().get(&name).0.clone();
@@ -169,14 +172,15 @@ impl Interpreter{
                 None
             },
             Type::VariableDeclaration { variable, value } => {
-                let result = Self::interpet(*value, scope.clone()).unwrap_or_else(|| panic!("attempted to assign void to a variable!"));
+                let result = Self::interpret(*value, scope.clone()).unwrap_or_else(|| panic!("attempted to assign void to a variable!"));
                 scope.borrow_mut()
                 .declare(Self::Symbol(*variable), result);
                 None
             },
             Type::Assignment { variable, value } => {
+                let new_value = Interpreter::interpret(*value, scope.clone()).unwrap();
                 scope.borrow_mut()
-                .assign(Self::Symbol(*variable), Rc::new(RefCell::new(*value)));
+                .assign(Self::Symbol(*variable), new_value);
                 None 
             },
             Type::CreateFunction { name, code, parameters } => {
@@ -187,7 +191,7 @@ impl Interpreter{
                 Some(function)
             },
             Type::Conditional { condition, then, otherwise } => {
-                if let Type::Bool(condition) = &*(*Interpreter::interpet(*condition, scope.clone()).unwrap()).borrow() {
+                if let Type::Bool(condition) = &*(*Interpreter::interpret(*condition, scope.clone()).unwrap()).borrow() {
                     return if *condition {
                         Interpreter::interpretCode(then, scope.clone())
                     } else if let Some(otherwise) = otherwise {
@@ -197,6 +201,20 @@ impl Interpreter{
                     }
                 }
                 None
+            },
+            Type::While { condition, code } => {
+                let mut result = None;
+                loop {
+                    if let Type::Bool(cond) = &*(*Interpreter::interpret(*condition.clone(), scope.clone()).unwrap()).borrow() {
+                        if !*cond { break }
+                        result = Interpreter::interpretCode(code.clone(), scope.clone());
+                    }
+                }
+              
+                result
+            },
+            Type::Invocation { code } => {
+                Interpreter::interpretCode(code.clone(), scope.clone())
             },
             Type::Symbol(name) => {
                 let result = Some((*scope).borrow().get(&name).get().clone());

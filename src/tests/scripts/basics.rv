@@ -1,13 +1,20 @@
-fn fibb(n) {
-    print(n)
-    
-    if n <= 1 {
-        n
-    } else {
-        fibb(n - 1) + fibb(n - 2)
-    }
+let a = 0
+let b = 0
+
+fn ibmer(x, y) {
+    print(x, y)
+    y
+}
+
+print("lol:") <| ibmer("final value:") <| while while a <= 5 {
+    a = a + 1
+    print(a)
+    b
+} <= 5 {
+    a = 0
+    b = b + 1
+    b
 }
 
 
-
-print(fibb(9))
+print(":") <| 20 |> print(":)")

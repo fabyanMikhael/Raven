@@ -10,7 +10,6 @@ pub mod vm;
 pub mod interpreter;
 
 fn main() {
-
     let mut i = Interpreter::new();
     i.addFunction("print", 1, |_, args|{
         let text = args.into_iter().map(|e| e.borrow().toString()).collect::<Vec<_>>().join(" ");
@@ -44,6 +43,18 @@ fn main() {
     i.addFunction("__leq__", 1, |_, args|{
         Some(Type::LessThanOrEquals(args[0].clone(), args[1].clone()))
     });
+    i.addFunction("__gte__", 1, |_, args|{
+        Some(Type::GreaterThanOrEquals(args[0].clone(), args[1].clone()))
+    });
+    i.addFunction("__lt__", 1, |_, args|{
+        Some(Type::LessThan(args[0].clone(), args[1].clone()))
+    });
+    i.addFunction("__gt__", 1, |_, args|{
+        Some(Type::GreaterThan(args[0].clone(), args[1].clone()))
+    });
+
+    i.addObject("true", Type::Bool(true));
+    i.addObject("false", Type::Bool(false));
 
     // i.addFunction("__if__", 1, |_, args|{
     //     Some(Type::NotEquals(args[0].clone(), args[1].clone()))
