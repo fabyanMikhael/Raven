@@ -6,9 +6,9 @@ fn ibmer(x, y) {
     y
 }
 
-print("lol:") <| ibmer("final value:") <| while while a <= 5 {
+print("lol:") <| $ibmer "final value:" <| while while a <= 5 {
     a = a + 1
-    print(a)
+    // print(a)
     b
 } <= 5 {
     a = 0
@@ -17,4 +17,4 @@ print("lol:") <| ibmer("final value:") <| while while a <= 5 {
 }
 
 
-print(":") <| 20 |> print(":)")
+print(":") <| 20

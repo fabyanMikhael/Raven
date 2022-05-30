@@ -9,6 +9,11 @@ mod tests;
 pub mod vm;
 pub mod interpreter;
 
+// #[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
+
+
 fn main() {
     let mut i = Interpreter::new();
     i.addFunction("print", 1, |_, args|{
@@ -25,7 +30,7 @@ fn main() {
     i.addFunction("__sub__", 1, |_, args|{
         Some(Type::Subtract(args[0].clone(), args[1].clone()))
     });
-    i.addFunction("__mult__", 1, |_, args|{
+    i.addFunction("__mul__", 1, |_, args|{
         Some(Type::Multiply(args[0].clone(), args[1].clone()))
     });
     i.addFunction("__div__", 1, |_, args|{
@@ -34,16 +39,19 @@ fn main() {
     i.addFunction("__pow__", 1, |_, args|{
         Some(Type::Power(args[0].clone(), args[1].clone()))
     });
-    i.addFunction("__equals__", 1, |_, args|{
+    i.addFunction("__mod__", 1, |_, args|{
+        Some(Type::Modulo(args[0].clone(), args[1].clone()))
+    });
+    i.addFunction("__eq__", 1, |_, args|{
         Some(Type::Equals(args[0].clone(), args[1].clone()))
     });
-    i.addFunction("__not_equals__", 1, |_, args|{
+    i.addFunction("__ne__", 1, |_, args|{
         Some(Type::NotEquals(args[0].clone(), args[1].clone()))
     });
-    i.addFunction("__leq__", 1, |_, args|{
+    i.addFunction("__le__", 1, |_, args|{
         Some(Type::LessThanOrEquals(args[0].clone(), args[1].clone()))
     });
-    i.addFunction("__gte__", 1, |_, args|{
+    i.addFunction("__ge__", 1, |_, args|{
         Some(Type::GreaterThanOrEquals(args[0].clone(), args[1].clone()))
     });
     i.addFunction("__lt__", 1, |_, args|{
@@ -52,6 +60,18 @@ fn main() {
     i.addFunction("__gt__", 1, |_, args|{
         Some(Type::GreaterThan(args[0].clone(), args[1].clone()))
     });
+    i.addFunction("__and__", 1, |_, args|{
+        Some(Type::And(args[0].clone(), args[1].clone()))
+    });
+    i.addFunction("__or__", 1, |_, args|{
+        Some(Type::Or(args[0].clone(), args[1].clone()))
+    });
+    i.addFunction("__not__", 1, |_, args|{
+        Some(Type::Not(args[0].clone()))
+    });
+
+
+
 
     i.addObject("true", Type::Bool(true));
     i.addObject("false", Type::Bool(false));
@@ -73,7 +93,7 @@ fn main() {
 
 
 
-    i.run(read_to_string("src/tests/scripts/basics.rv").unwrap());
+    i.run(read_to_string("src/tests/scripts/basics.rv").unwrap(), true);
 
 
 
