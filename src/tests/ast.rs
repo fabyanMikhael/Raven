@@ -125,9 +125,10 @@ pub fn declaration_and_assignment(){
 #[test]
 pub fn functional(){
 
-    println!("beginning first test");
+    // println!("beginning first test");
     const BASIC: &str     = r##"$ test 10 "hello""##;
     let ast     = ParseString(BASIC);
+
     let print   = Box::new(Type::Symbol("test".to_owned()));
     let hello       = Type::String("hello".to_owned());
     let ten         = Type::Number(10.0);
@@ -136,10 +137,10 @@ pub fn functional(){
 
     assert_eq!(ast, expected);
 
-    println!("beginning second test");
-    const BASIC2: &str     = r##"$ test  10   "hello"   "##;
-    let ast     = ParseString(BASIC2);
-    assert_eq!(ast, expected);
+    // println!("beginning second test");
+    // const BASIC2: &str     = r##"$ test  10   "hello"   "##;
+    // let ast     = ParseString(BASIC2);
+    // assert_eq!(ast, expected);
 }
 
 
@@ -193,3 +194,32 @@ pub fn piping_chain() {
 
     assert_eq!(ast, expected);
 }
+
+
+#[test]
+pub fn while_loop() {
+    const BASIC: &str     = r##"while true { print("hello") }"##;
+    let ast     = ParseString(BASIC);
+    let print   = Box::new(Type::Symbol("print".to_owned()));
+    let hello       = Type::String("hello".to_owned());
+    let true_value       = Type::Symbol("true".to_owned());
+    let while_loop      = Type::While { condition: Box::new(true_value), code: vec![Type::Call{function: print, arguments: vec![hello]}] };
+    let expected       = vec![while_loop];
+    assert_eq!(ast, expected);
+}
+
+
+
+#[test]
+pub fn if_else() {
+    const BASIC: &str     = r##"if true { print("hello") } else { print("goodbye") }"##;
+    let ast     = ParseString(BASIC);
+    let print   = Box::new(Type::Symbol("print".to_owned()));
+    let hello       = Type::String("hello".to_owned());
+    let goodbye       = Type::String("goodbye".to_owned());
+    let true_value       = Type::Symbol("true".to_owned());
+    let if_else      = Type::Conditional { condition: Box::new(true_value), then: vec![Type::Call{function: print.clone(), arguments: vec![hello]}], otherwise: Some(vec![Type::Call{function: print, arguments: vec![goodbye]}]) };
+    let expected       = vec![if_else];
+    assert_eq!(ast, expected);
+}
+

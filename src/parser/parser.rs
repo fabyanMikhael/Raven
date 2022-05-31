@@ -26,6 +26,21 @@ impl PartialEq for Func{
     }
 }
 
+#[inline(always)]
+fn bbox<T>(val: T) -> Box<T>{
+    Box::new(val)
+}
+
+#[inline(always)]
+fn sym(name: &str) -> Type{
+    Type::Symbol(name.to_owned())
+}
+
+#[inline(always)]
+fn bsym(name: &str) -> Box<Type> {
+    Box::new(Type::Symbol(name.to_owned()))
+}
+
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +56,8 @@ pub enum Type{
     Function(FunctionTypes),
     Conditional{condition: Box<Type>, then: Vec<Type>, otherwise: Option<Vec<Type>>},
     While{condition: Box<Type>, code: Vec<Type>},
-    Invocation{code: Vec<Type>}
+    Invocation{code: Vec<Type>},
+    Comment(String)
 }
 
 impl Into<Rc<RefCell<Self>>> for Type{
@@ -50,7 +66,7 @@ impl Into<Rc<RefCell<Self>>> for Type{
     }
 }
 
-impl Type{
+impl Type {
     pub fn wrap(self) -> Object{
         Rc::new(RefCell::new(self))
     }
@@ -63,77 +79,10 @@ impl Type{
             _ => format!("{:?}", self)
         }
     }
-    pub fn Add(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Number(*x+*y).wrap()},
-            (Type::String(x), Type::String(y)) => {Type::String(x.to_owned()+y).wrap()},
-            (Type::String(x), Type::Number(y)) => {Type::String(x.to_owned()+&format!("{}", y)).wrap()},
-            (Type::Number(x), Type::String(y)) => {Type::String(format!("{}", x) + y).wrap()},
-            _ => panic!("attempted to Add {:?} with {:?}",x,y),
-        }
-    }
-    pub fn Subtract(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Number(*x-*y).wrap()},
-            _ => panic!("attempted to Subtract {:?} with {:?}",x,y),
-        }
-    }
-    pub fn Multiply(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Number(*x * *y).wrap()},
-            (Type::String(x), Type::Number(y)) => {Type::String(x.repeat(*y as usize)).wrap()},
-            (Type::Number(x), Type::String(y)) => {Type::String(y.repeat(*x as usize)).wrap()},
-            _ => panic!("attempted to Multiply {:?} with {:?}",x,y),
-        }
-    }
-    pub fn Divide(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Number(*x / *y).wrap()},
-            _ => panic!("attempted to Divide {:?} with {:?}",x,y),
-        }
-    }
 
-    pub fn Power(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Number((*x).powf(*y)).wrap()},
-            _ => panic!("attempted to Divide {:?} with {:?}",x,y),
-        }
-    }
-
-    pub fn Equals(x: Object, y: Object) -> Object{
-        return Type::Bool(*x.borrow() == *y.borrow()).wrap()
-    }
-
-    pub fn NotEquals(x: Object, y: Object) -> Object{
-        return Type::Bool(*x.borrow() != *y.borrow()).wrap()
-    }
-
-    pub fn LessThanOrEquals(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x <= *y).wrap()},
-            _ => panic!("attempted to compare {:?} with {:?}",x,y),
-        }
-    }
-
-    pub fn GreaterThanOrEquals(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x >= *y).wrap()},
-            _ => panic!("attempted to compare {:?} with {:?}",x,y),
-        }
-    }
-
-    pub fn LessThan(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x < *y).wrap()},
-            _ => panic!("attempted to compare {:?} with {:?}",x,y),
-        }
-    }
-
-    pub fn GreaterThan(x: Object, y: Object) -> Object{
-        match (&*x.borrow(),&*y.borrow()){
-            (Type::Number(x), Type::Number(y)) => {Type::Bool(*x > *y).wrap()},
-            _ => panic!("attempted to compare {:?} with {:?}",x,y),
-        }
+    #[inline(always)]
+    pub fn c(&self) -> Type{
+        self.clone()
     }
 }
 
@@ -151,31 +100,55 @@ peg::parser!{
         rule number() -> Type
         = n:$(['0'..='9' | '.' | '-']+) { Type::Number(n.parse::<f32>().unwrap_or_else(|_|panic!("value: {} is not a valid number!", n)))}
 
+
         rule Arithmetic() -> Type
         = precedence!{
-            _ x:Atom() _ "**" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__pow__".to_owned())), arguments: vec![x,y] } }
+            x:(@) _ "+" _  y:@ { Type::Call{function: bsym("__add__"), arguments: vec![x,y] } }
+            x:(@) _ "-" _  y:@ { Type::Call{function: bsym("__sub__"), arguments: vec![x,y] } }
             --
-            _ x:Atom() _ "*" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__mult__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ "/" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__div__".to_owned())), arguments: vec![x,y] } }
+            x:(@) _ "*" _  y:@ { Type::Call{function: bsym("__mul__"), arguments: vec![x,y] } }
+            x:(@) _ "/" _  y:@ { Type::Call{function: bsym("__div__"), arguments: vec![x,y] } }
             --
-            _ x:Atom() _ "+" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__add__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ "-" _ y:Arithmetic() _ { Type::Call{function: Box::new(Type::Symbol("__sub__".to_owned())), arguments: vec![x,y] } }
+            x:(@) _ "**" _  y:@ { Type::Call{function: bsym("__pow__"), arguments: vec![x,y] } }
+            x:(@) _ "%" _  y:@ { Type::Call{function: bsym("__mod__"), arguments: vec![x,y] } }
             --
-            _ x:Atom() _ {x}
+            x:Atom() {x}
+            "(" _ x:Arithmetic() _ ")" _ {x}
         }
 
-        rule Conditional() -> Type
+
+        rule Operation() -> Type
         = precedence!{
-            _ x:Atom() _ "==" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__equals__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ "!=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__not_equals__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ "<=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__leq__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ ">=" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__gte__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ "<" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__lt__".to_owned())), arguments: vec![x,y] } }
-            _ x:Atom() _ ">" _ y:Atom() _ { Type::Call{ function: Box::new(Type::Symbol("__gt__".to_owned())), arguments: vec![x,y] } }
+            x:symbol() _ "++" _ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__add__"), arguments: vec![x, Type::Number(1.0)] }) } }
+            x:symbol() _ "--" _ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__sub__"), arguments: vec![x, Type::Number(1.0)] }) } }
+            x:symbol() _ "+=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__add__"), arguments: vec![x,y] }) } }
+            x:symbol() _ "-=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__sub__"), arguments: vec![x,y] }) } }
+            x:symbol() _ "*=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__mul__"), arguments: vec![x,y] }) } }
+            x:symbol() _ "/=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__div__"), arguments: vec![x,y] }) } }
+            x:symbol() _ "**=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__pow__"), arguments: vec![x,y] }) } }
+            x:symbol() _ "%=" _  y:@ { Type::Assignment { variable: bbox(x.c()), value: bbox(Type::Call{function: bsym("__mod__"), arguments: vec![x,y] }) } }
+            --
+            x:(@) _ "&&" _ y:@ { Type::Call{function: bsym("__and__"), arguments: vec![x,y] } }
+            x:(@) _ "||" _ y:@ { Type::Call{function: bsym("__or__"), arguments: vec![x,y] } }
+            --
+            x:(@) _ "==" _ y:@ { Type::Call{function: bsym("__eq__"), arguments: vec![x,y] } }
+            x:(@) _ "!=" _ y:@ { Type::Call{function: bsym("__ne__"), arguments: vec![x,y] } }
+            --
+            x:(@) _ "<=" _ y:@ { Type::Call{function: bsym("__le__"), arguments: vec![x,y] } }
+            x:(@) _ ">=" _ y:@ { Type::Call{function: bsym("__ge__"), arguments: vec![x,y] } }
+            --
+            x:(@) _ "<" _ y:@ { Type::Call{function: bsym("__lt__"), arguments: vec![x,y] } }
+            x:(@) _ ">" _ y:@ { Type::Call{function: bsym("__gt__"), arguments: vec![x,y] } }
+            --
+            "!" _ x:(@) { Type::Call{function: bsym("__not__"), arguments: vec![x] } }
+            --
+            x:Arithmetic() {x}
+            "(" _ x:Operation() _ ")" _ {x}       
         }
+
 
         rule symbol() -> Type
-        = n:$(['A'..='z']+['0'..='9']*) { Type::Symbol(n.to_string()) }
+        = n:$(['A'..='z'](['0'..='9'] / ['A'..='z'])*) { Type::Symbol(n.to_string()) }
         
         rule spaced_symbol() -> Type
         = _ n:symbol() _ {n}
@@ -184,32 +157,16 @@ peg::parser!{
         = "\"" n:$([^ '"']*) "\"" { Type::String(n.to_string())}
     
         rule call() -> Type
-        = _ sym:symbol() _ "(" expr:(parse() ** ",") ")"  &_  {Type::Call{function: Box::new(sym), arguments: expr}}
+        = _ sym:symbol() _ "(" expr:(parse() ** ",") ")"  &_  {Type::Call{function: bbox(sym), arguments: expr}}
 
         rule chain_call() -> Type
-        = _ "$" _ sym:symbol() _ expr:( parse() ** " ")  _  {Type::Call{function: Box::new(sym), arguments: expr}}
+        = _ "$" _ sym:symbol() _ expr:(Operation() ** " ")  _  {Type::Call{function: bbox(sym), arguments: expr}}
 
-
-        rule dual_pipe() -> Type
-        = left:Atom() _ "<|" _ middle:Atom() _ "|>" _ right:Atom() {
-            let mut code = vec![];
-
-            if let Type::Call {function, mut arguments } = left {
-                arguments.push(middle.clone());
-                code.push(Type::Call { function, arguments })
-            }
-
-            if let Type::Call {function, mut arguments } = right {
-                arguments.insert(0, middle);
-                code.push(Type::Call { function, arguments })
-            }
-
-            Type::Invocation { code }
-        }
-
+        rule comment() -> Type
+        = _ "//" n:$([^ '\n']*) "\n"? {Type::Comment(n.to_string())}
 
         rule pipe_right() -> Type
-        = _ start:(start:Atom() _ "|>" _ {start})? _ expr:(pipe_call_right() ++ "|>") _  {
+        = _ start:(start:Operation() _ "|>" _ {start})? _ expr:(pipe_call_right() ++ "|>") _  {
             let mut last = start;
             for func in expr {
                 if let Type::Call { function, mut arguments } = func {
@@ -223,7 +180,7 @@ peg::parser!{
         }
 
         rule pipe_left() -> Type
-        = _ expr:(pipe_call_left() ++ "<|") _ end:("<|" _ end:Atom() _ {end})? _ {
+        = _ expr:(pipe_call_left() ++ "<|") _ end:("<|" _ end:Operation() _ {end})? _ {
             let mut last = end;
             for func in expr.into_iter().rev() {
                 if let Type::Call { function, mut arguments } = func {
@@ -243,32 +200,39 @@ peg::parser!{
         rule else_elif() -> Vec<Type>
         = "else" _ res:(Else() / Elif()) {res}
         rule if_condition() -> Type
-        = _ "if" _ condition:parse() _ then:bracket_block() _ otherwise:(else_elif())? _ {
-            Type::Conditional{condition: Box::new(condition), then, otherwise}
+        = _ "if" _ "("? _ condition:Operation() _ ")"? _ then:bracket_block() _ otherwise:(else_elif())? _ {
+            Type::Conditional{condition: bbox(condition), then, otherwise}
         }
 
         rule while_loop() -> Type
-        = _ "while" _ condition:parse() _ code:bracket_block() _ {
-            Type::While{condition: Box::new(condition), code}
+        = _ "while" _ "("? _ condition:Operation() _ ")"? _ code:bracket_block() _ {
+            Type::While{condition: bbox(condition), code}
         }
 
         rule function() -> Type
-        = _ "fn" _ name:symbol()? _ "(" parameters:(spaced_symbol() ** ",") ")" _ code:bracket_block() _ {
-            let name = name.unwrap_or_else(|| Type::Symbol("".to_owned()));
-            let name = Box::new(name);
+        = _ "fn" _ name:symbol() _ "(" _ parameters:(spaced_symbol() ** ",") _ ")" _ code:bracket_block() _ {
+            let name = bbox(name);
             let code = code.into_iter().map(Box::new).collect();
             let parameters = parameters.into_iter().map(|e| e.toString()).collect();
             Type::CreateFunction { name, code, parameters }
         }
 
+        rule lambda() -> Type
+        = _ "(" _ parameters:(spaced_symbol() ** ",") _ ")" _ "=>" _ code:bracket_block() _ {
+            let parameters = parameters.into_iter().map(|e| e.toString()).collect();
+            let code = code.into_iter().map(Box::new).collect();
+            Type::CreateFunction { name: bsym(""), parameters, code }
+        }
+
         rule assignment() -> Type
         = _ name:symbol() _ "=" _ expr:parse() _ {
-            Type::Assignment { variable: Box::new(name), value: Box::new(expr) }
+            Type::Assignment { variable: bbox(name), value: bbox(expr) }
         }
         rule declaration() -> Type
         = _ "let" _ name:symbol() _ "=" _ expr:parse() _ {
-            Type::VariableDeclaration { variable: Box::new(name), value: Box::new(expr) }
+            Type::VariableDeclaration { variable: bbox(name), value: bbox(expr) }
         }
+
 
         rule Atom() -> Type = precedence!{
             n:chain_call() {n}
@@ -281,28 +245,32 @@ peg::parser!{
             n:number() {n}
             n:symbol() {n}
             n:string() {n}
-            _ "(" _ e:Arithmetic() _ ")" _ { e }
+            --
+            _ "(" _ e:Atom() _ ")" _ { e }
         }
 
         rule parse_intermediate() -> Type = precedence!{
+            n:comment() {n}
+            --
             n:declaration() {n}
             --
             n:assignment() {n}
             --
-            n:dual_pipe() {n}
-            --
+            // n:dual_pipe() {n}
+            // --
             n:pipe_left() {n}
             n:pipe_right() {n}
             --
+            n:lambda() {n}
             n:function() {n}
             n:chain_call() {n}
-            --
-            n:Conditional() {n}
             --
             n:if_condition() {n}
             n:while_loop() {n}
             --
-            n:Arithmetic() {n}
+            // n:Arithmetic() {n}
+            // --
+            n:Operation() {n}
             --
             n:call()   {n}
             --
@@ -312,7 +280,7 @@ peg::parser!{
         }
 
         rule parse() -> Type = 
-        _ n:parse_intermediate() &_  {n}
+        _  n:parse_intermediate() &_  {n}
         
         rule pipe_call_right() -> Type = precedence! {
             _ n:pipe_left() _ {n}

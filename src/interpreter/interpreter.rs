@@ -142,9 +142,18 @@ impl Interpreter{
         self.global.borrow_mut().declare(name.to_string(), value.wrap());
     }
 
-    pub fn run(&mut self, code: String){
+    pub fn run(&mut self, code: String, debug: bool){
         let node = ParseString(&code);
-        println!("{:#?}", node);
+        // println!("{:#?}", node);
+
+        if debug {
+            print!("----------------\n");
+            for n in &node {
+                println!("{}\n", n.to_string(0, 0));
+            }
+            print!("----------------\n");
+        }
+
         Self::interpretCode(node, self.global.clone());
     }
 
