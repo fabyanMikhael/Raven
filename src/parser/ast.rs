@@ -87,7 +87,14 @@ impl Type {
             },
             Type::VariableDeclaration { variable, value } => format!("{} {} = {}", "let".purple(), variable.to_string(depth, br_depth), value.to_string(depth, br_depth)),
             Type::Assignment { variable, value } => format!("{} = {}", variable.to_string(depth, br_depth), value.to_string(depth, br_depth)),
-            Type::CreateFunction { name, code, parameters } => format!("{} {}{}{}{} {}\n{}\n{}{}", "fn".purple(), name.to_string(depth, br_depth), bracket("(", br_depth), parameters.iter().map(|p| p.red().to_string()).collect::<Vec<String>>().join(", "),bracket(")", br_depth), bracket("{", depth), listBoxedBlock(code, depth + 1), sep(depth), bracket("}", depth)),
+            Type::CreateFunction { name, code, parameters } => {
+                let name = name.fn_symbol(depth, br_depth);
+                if name == "" {
+                    format!("{}{}{} {} {}\n{}\n{}{}", bracket("(", br_depth), parameters.iter().map(|p| p.red().to_string()).collect::<Vec<String>>().join(", "),bracket(")", br_depth), "=>", bracket("{", depth),  listBoxedBlock(code, depth + 1), sep(depth), bracket("}", depth))
+                } else {
+                    format!("{} {}{}{}{} {}\n{}\n{}{}", "fn".purple(), name.blue(), bracket("(", br_depth), parameters.iter().map(|p| p.red().to_string()).collect::<Vec<String>>().join(", "),bracket(")", br_depth), bracket("{", depth), listBoxedBlock(code, depth + 1), sep(depth), bracket("}", depth))
+                }
+            },
             Type::Conditional { condition, then, otherwise } => {
                 let first = format!("{} {} {}\n{}\n{}{}", "if".purple(),  condition.to_string(depth, br_depth), bracket("{", depth), listBlock(then, depth + 1), sep(depth), bracket("}", depth));
                 if let Some(other) = otherwise {

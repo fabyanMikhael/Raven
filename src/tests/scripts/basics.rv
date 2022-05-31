@@ -1,20 +1,11 @@
-let a = 0
-let b = 0
 
-fn ibmer(x, y) {
-    print(x, y)
-    y
-}
 
-print("lol:") <| $ibmer "final value:" <| while while a <= 5 {
-    a = a + 1
-    // print(a)
-    b
-} <= 5 {
-    a = 0
-    b = b + 1
-    b
+
+fn soup(a, call) {
+    call(a)
 }
 
 
-print(":") <| 20
+soup(2, (x) => {
+    print(x)
+})

@@ -13,6 +13,10 @@ pub mod interpreter;
 pub mod wasm;
 
 
+// #[macro_use]
+// extern crate lazy_static;
+
+
 
 fn main() {
     let mut i = Interpreter::new();
